@@ -116,6 +116,7 @@ class LegalState(TypedDict):
     needs_compliance: bool
     tax_result: Annotated[str, _last_wins]
     compliance_result: Annotated[str, _last_wins]
+    privacy_analysis: Annotated[str, _last_wins]
     final_answer: str
 
 
@@ -179,15 +180,24 @@ async def check_routing(state: LegalState) -> dict:
 
 
 def route_to_specialists(state: LegalState) -> list[Send]:
-    """Routing function: dispatch parallel Send objects to specialist nodes."""
+    """Routing function: dispatch parallel Send objects based on keyword matching."""
+    question_lower = state["question"].lower()
     sends: list[Send] = []
-    if state.get("needs_tax"):
+    
+    # 1. Kiểm tra điều kiện cho Tax Agent
+    if any(kw in question_lower for kw in ["tax", "irs", "thuế", "avoid"]):
         sends.append(Send("call_tax_specialist", state))
-    if state.get("needs_compliance"):
+    
+    # 2. Kiểm tra điều kiện cho Compliance Agent
+    if any(kw in question_lower for kw in ["compliance", "sec", "regulation", "regulatory"]):
         sends.append(Send("call_compliance_specialist", state))
-    if not sends:
-        sends.append(Send("aggregate", state))
-    return sends
+    
+    # 3. Kiểm tra điều kiện cho Privacy Agent (Bài Tập 4.2)
+    if any(kw in question_lower for kw in ["data", "privacy", "gdpr", "dữ liệu"]):
+        sends.append(Send("privacy_agent", state))
+    
+    # Nếu không trùng từ khóa nào, đi thẳng tới node tổng hợp kết quả
+    return sends if sends else [Send("aggregate", state)]
 
 
 async def call_tax_specialist(state: LegalState) -> dict:
@@ -234,6 +244,23 @@ async def call_compliance_specialist(state: LegalState) -> dict:
     print(f"  [Node: call_compliance_specialist] Done ({len(final_msg)} chars)")
     return {"compliance_result": final_msg}
 
+async def privacy_agent(state: LegalState) -> dict:
+    """Agent chuyên về luật bảo vệ dữ liệu cá nhân."""
+    print("\n  [Node: privacy_agent] Privacy specialist agent starting...")
+    llm = get_llm()
+    
+    prompt = f"""Bạn là chuyên gia về GDPR và luật bảo vệ dữ liệu cá nhân.
+    
+Câu hỏi gốc: {state['question']}
+Phân tích pháp lý: {state.get('law_analysis', 'N/A')}
+
+Hãy phân tích các vấn đề về privacy và GDPR (nếu có).
+Keep your response under 200 words.
+"""
+    
+    response = await llm.ainvoke([HumanMessage(content=prompt)])
+    print(f"  [Node: privacy_agent] Done ({len(response.content)} chars)")
+    return {"privacy_analysis": response.content}
 
 async def aggregate(state: LegalState) -> dict:
     """Combine all specialist analyses into a final comprehensive answer."""
@@ -247,6 +274,8 @@ async def aggregate(state: LegalState) -> dict:
         sections.append(f"## Tax Analysis\n{state['tax_result']}")
     if state.get("compliance_result"):
         sections.append(f"## Regulatory Compliance Analysis\n{state['compliance_result']}")
+    if state.get("privacy_analysis"):
+        sections.append(f"## Data Privacy & GDPR Analysis\n{state['privacy_analysis']}")
 
     combined = "\n\n---\n\n".join(sections)
 
@@ -278,6 +307,7 @@ def create_graph():
     graph.add_node("check_routing", check_routing)
     graph.add_node("call_tax_specialist", call_tax_specialist)
     graph.add_node("call_compliance_specialist", call_compliance_specialist)
+    graph.add_node("privacy_agent", privacy_agent)
     graph.add_node("aggregate", aggregate)
 
     graph.set_entry_point("analyze_law")
@@ -285,16 +315,17 @@ def create_graph():
     graph.add_conditional_edges(
         "check_routing",
         route_to_specialists,
-        ["call_tax_specialist", "call_compliance_specialist", "aggregate"],
+        ["call_tax_specialist","privacy_agent", "call_compliance_specialist", "aggregate"],
     )
     graph.add_edge("call_tax_specialist", "aggregate")
     graph.add_edge("call_compliance_specialist", "aggregate")
+    graph.add_edge("privacy_agent", "aggregate")
     graph.add_edge("aggregate", END)
 
     return graph.compile()
 
 
-QUESTION = "If a company breaks a contract and avoids taxes, what are the legal and regulatory consequences?"
+QUESTION = "What are the legal consequences of a corporate data privacy breach, tax fraud, and contract violations?"
 
 
 async def main():
@@ -357,6 +388,8 @@ async def main():
     print("  ./start_all.sh && python test_client.py")
     print("=" * 70)
 
+    from IPython.display import Image, display
+    display(Image(graph.get_graph().draw_mermaid_png()))
 
 if __name__ == "__main__":
     load_dotenv()

@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demo Tương Tác Multi-Agent - Stage 4 & 5</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @keyframes pulse-border {
+            0%, 100% { border-color: rgb(59, 130, 246); box-shadow: 0 0 0 0px rgba(59, 130, 246, 0.7); }
+            50% { border-color: rgb(37, 99, 235); box-shadow: 0 0 12px 4px rgba(59, 130, 246, 0.4); }
+        }
+        .node-active {
+            animation: pulse-border 2s infinite;
+            background-color: rgba(59, 130, 246, 0.1) !important;
+            color: #1d4ed8 !important;
+            font-weight: bold;
+        }
+        .node-done {
+            border-color: #10b981 !important;
+            background-color: rgba(16, 185, 129, 0.1) !important;
+            color: #065f46 !important;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen">
+
+    <header class="bg-slate-900 text-white py-6 px-8 shadow-md">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-bold flex items-center gap-2">
+                    <i data-lucide="network" class="text-blue-400"></i> Multi-Agent System Dashboard
+                </h1>
+                <p class="text-sm text-slate-400 mt-1">Mô phỏng luồng xử lý phân tán Stage 4 & Stage 5 (A2A Protocol)</p>
+            </div>
+            <div class="flex gap-3">
+                <span class="bg-blue-500/20 text-blue-300 px-3 py-1 rounded-full text-xs font-semibold border border-blue-500/30">Stage 4: In-Process</span>
+                <span class="bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full text-xs font-semibold border border-emerald-500/30">Stage 5: Distributed A2A</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <div class="lg:col-span-1 flex flex-col gap-6">
+            <div class="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
+                <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <i data-lucide="terminal" class="text-slate-500"></i> Trình điều khiển mô phỏng
+                </h2>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-slate-600 mb-2">Chọn kịch bản câu hỏi mẫu:</label>
+                    <select id="scenarioSelect" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="all">Kịch bản 1: Vi phạm hợp đồng + Né thuế + Lộ dữ liệu (Gọi 3 Agent)</option>
+                        <option value="tax_only">Kịch bản 2: Công ty trốn thuế doanh nghiệp (Chỉ gọi Tax Agent)</option>
+                        <option value="no_privacy">Kịch bản 3: Hủy hợp đồng thầu & vi phạm SEC (Tax + Compliance)</option>
+                    </select>
+                </div>
+
+                <div class="mb-5">
+                    <label class="block text-sm font-medium text-slate-600 mb-2">Nội dung câu hỏi pháp lý (`QUESTION`):</label>
+                    <textarea id="questionInput" rows="4" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"></textarea>
+                </div>
+
+                <button id="runBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer">
+                    <i data-lucide="play" class="w-4 h-4"></i> Khởi chạy Hệ Thống Agent
+                </button>
+            </div>
+
+            <div class="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
+                <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4">Trạng thái cổng dịch vụ (Stage 5 Architecture)</h3>
+                <div class="flex flex-col gap-3">
+                    <div class="flex justify-between items-center p-2 bg-slate-50 rounded-lg border border-slate-100">
+                        <span class="text-sm font-medium">Registry Service (Port 10000)</span>
+                        <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+                    </div>
+                    <div class="flex justify-between items-center p-2 bg-slate-50 rounded-lg border border-slate-100">
+                        <span class="text-sm font-medium">Customer Agent (Port 10100)</span>
+                        <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+                    </div>
+                    <div class="flex justify-between items-center p-2 bg-slate-50 rounded-lg border border-slate-100">
+                        <span class="text-sm font-medium">Law Agent (Port 10101)</span>
+                        <span id="status-10101" class="h-2 w-2 rounded-full bg-slate-400"></span>
+                    </div>
+                    <div class="flex justify-between items-center p-2 bg-slate-50 rounded-lg border border-slate-100">
+                        <span class="text-sm font-medium">Tax Agent (Port 10102)</span>
+                        <span id="status-10102" class="h-2 w-2 rounded-full bg-slate-400"></span>
+                    </div>
+                    <div class="flex justify-between items-center p-2 bg-slate-50 rounded-lg border border-slate-100">
+                        <span class="text-sm font-medium">Compliance Agent (Port 10103)</span>
+                        <span id="status-10103" class="h-2 w-2 rounded-full bg-slate-400"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="lg:col-span-2 flex flex-col gap-6">
+            
+            <div class="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
+                <h2 class="text-lg font-semibold mb-6 flex items-center gap-2">
+                    <i data-lucide="git-graph" class="text-slate-500"></i> Đồ thị luồng xử lý song song (Graph Topology)
+                </h2>
+                
+                <div class="flex flex-col items-center justify-center py-6 gap-6 relative">
+                    <div id="node-analyze" class="w-48 bg-slate-50 border-2 border-slate-300 rounded-xl p-3 text-center text-sm shadow-sm transition-all text-slate-600">
+                        <div class="font-bold text-xs uppercase text-slate-400 mb-1">Node 1</div>
+                        analyze_law
+                    </div>
+
+                    <div class="w-0.5 h-6 bg-slate-300"></div>
+
+                    <div id="node-route" class="w-48 bg-slate-50 border-2 border-slate-300 rounded-xl p-3 text-center text-sm shadow-sm transition-all text-slate-600">
+                        <div class="font-bold text-xs uppercase text-slate-400 mb-1">Conditional Router</div>
+                        check_routing
+                    </div>
+
+                    <div class="flex gap-4 justify-center items-center w-full mt-2 relative px-4">
+                        <div class="absolute -top-4 left-1/2 -translate-x-1/2 w-3/4 h-0.5 bg-slate-300 z-0"></div>
+                        
+                        <div id="node-tax" class="w-40 bg-slate-50 border-2 border-slate-300 rounded-xl p-3 text-center text-xs shadow-sm transition-all text-slate-500 z-10 opacity-40">
+                            <div class="font-bold text-[10px] uppercase text-slate-400 mb-1">Sub-Agent</div>
+                            call_tax_specialist
+                        </div>
+                        <div id="node-compliance" class="w-40 bg-slate-50 border-2 border-slate-300 rounded-xl p-3 text-center text-xs shadow-sm transition-all text-slate-500 z-10 opacity-40">
+                            <div class="font-bold text-[10px] uppercase text-slate-400 mb-1">Sub-Agent</div>
+                            call_compliance_specialist
+                        </div>
+                        <div id="node-privacy" class="w-40 bg-slate-50 border-2 border-slate-300 rounded-xl p-3 text-center text-xs shadow-sm transition-all text-slate-500 z-10 opacity-40">
+                            <div class="font-bold text-[10px] uppercase text-slate-400 mb-1">New Sub-Agent</div>
+                            privacy_agent
+                        </div>
+                    </div>
+
+                    <div class="w-full relative h-6">
+                        <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-3/4 h-0.5 bg-slate-300 z-0"></div>
+                    </div>
+
+                    <div id="node-aggregate" class="w-48 bg-slate-50 border-2 border-slate-300 rounded-xl p-3 text-center text-sm shadow-sm transition-all text-slate-600 z-10">
+                        <div class="font-bold text-xs uppercase text-slate-400 mb-1">Node Final</div>
+                        aggregate_results
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col min-h-[350px]">
+                <div class="bg-slate-900 px-4 py-2.5 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <div class="flex gap-1.5">
+                            <span class="w-3 h-3 rounded-full bg-rose-500 inline-block"></span>
+                            <span class="w-3 h-3 rounded-full bg-amber-500 inline-block"></span>
+                            <span class="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
+                        </div>
+                        <span class="text-xs text-slate-400 font-mono ml-2">Console Live Stream Output</span>
+                    </div>
+                    <button id="clearLogBtn" class="text-slate-400 hover:text-white text-xs font-mono transition-all">Clear</button>
+                </div>
+                
+                <div id="consoleLogs" class="bg-slate-950 text-slate-200 p-4 font-mono text-xs overflow-y-auto flex-1 leading-relaxed">
+                    <div class="text-slate-500">// Nhấn nút "Khởi chạy" để bắt đầu kích hoạt chuỗi tính toán Multi-Agent...</div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        // Khởi tạo các biểu tượng Lucide
+        lucide.createIcons();
+
+        // Danh sách nội dung câu hỏi mẫu theo kịch bản
+        const questions = {
+            all: "What are the legal consequences of a corporate data privacy breach, tax fraud, and contract violations?",
+            tax_only: "If a company avoids corporate income taxes using offshore accounts, what are the IRS civil fraud penalties?",
+            no_privacy: "What are the corporate governance liabilities under SEC and regulatory compliance frameworks for breaking a contract?"
+        };
+
+        // Đồng bộ câu hỏi khi đổi kịch bản trên giao diện selector
+        const scenarioSelect = document.getElementById('scenarioSelect');
+        const questionInput = document.getElementById('questionInput');
+        questionInput.value = questions[scenarioSelect.value];
+
+        scenarioSelect.addEventListener('change', () => {
+            questionInput.value = questions[scenarioSelect.value];
+        });
+
+        // Định nghĩa nội dung log giả lập cho từng kịch bản
+        const simulationData = {
+            analyze: "  [Node: analyze_law] Lead attorney analyzing core contract law and business liability aspects...\n  [Node: analyze_law] Done. Detected significant exposures under corporate obligations.",
+            route: (scen) => {
+                let tax = scen === 'all' || scen === 'tax_only';
+                let comp = scen === 'all' || scen === 'no_privacy';
+                let priv = scen === 'all';
+                return `  [Node: check_routing] Analyzing keywords and patterns via Router...\n  [Node: check_routing] Decision Routing Matrix Matrix: needs_tax=${tax}, needs_compliance=${comp}, needs_privacy=${priv}`;
+            },
+            tax: "  [Node: call_tax_specialist] Tax specialist agent starting ReAct Loop...\n  [Node: call_tax_specialist] Tra cứu thành công IRC § 6663 (Phạt 75% gian lận thuế) & 26 U.S.C. § 7201.\n  [Node: call_tax_specialist] Done. Đã xuất báo cáo Thuế (185 từ).",
+            compliance: "  [Node: call_compliance_specialist] Compliance officer analyzing corporate governance...\n  [Node: call_compliance_specialist] Tra cứu khung Sarbanes-Oxley (SOX) & Đạo luật FCPA thành công.\n  [Node: call_compliance_specialist] Done. Đã xuất báo cáo Tuân thủ (162 từ).",
+            privacy: "  [Node: privacy_agent] Privacy and GDPR specialist sub-agent starting...\n  [Node: privacy_agent] Phát hiện vi phạm dữ liệu người dùng. Áp lệnh phạt GDPR tối đa 4% doanh thu toàn cầu.\n  [Node: privacy_agent] Done. Đã xuất báo cáo Privacy & Bảo mật dữ liệu (198 từ).",
+            aggregate: (scen) => {
+                let sections = ["## Legal Analysis\n- Vi phạm hợp đồng nghiêm trọng làm phát sinh nghĩa vụ bồi thường thiệt hại."]
+                if(scen === 'all' || scen === 'tax_only') sections.push("## Tax Analysis\n- Cáo buộc trốn thuế cấu thành tội danh hình sự theo 26 U.S.C. § 7201, đối mặt mức phạt 250K USD và truy thu kèm lãi suất phạt dân sự 75%.");
+                if(scen === 'all' || scen === 'no_privacy') sections.push("## Regulatory Compliance Analysis\n- Vi phạm nghĩa vụ công bố thông tin của SEC, có nguy cơ kích hoạt điều khoản phạt trục xuất giám đốc điều hành theo luật SOX.");
+                if(scen === 'all') sections.push("## Data Privacy & GDPR Analysis\n- Hệ thống ghi nhận lỗi bảo mật làm rò rỉ thông tin cá nhân. Doanh nghiệp đối mặt án phạt từ Ủy ban Bảo vệ Dữ liệu Châu Âu (EDPR) lên tới 20 triệu EUR.");
+                
+                return `\n  [Node: aggregate] Combining and consolidating all active specialist reports...\n  [Node: aggregate] Synthesizing into cohesive client memorandum.\n\n======================================================================\nFINAL COMPREHENSIVE COMPLIANCE ANSWER\n======================================================================\n\n${sections.join('\n\n')}\n\n======================================================================`;
+            }
+        };
+
+        // Luồng chạy mô phỏng hiệu ứng giao diện
+        const consoleLogs = document.getElementById('consoleLogs');
+        const runBtn = document.getElementById('runBtn');
+
+        function appendLog(text, colorClass = "text-slate-200") {
+            const div = document.createElement('div');
+            div.className = colorClass + " mb-1";
+            div.innerText = text;
+            consoleLogs.appendChild(div);
+            consoleLogs.scrollTop = consoleLogs.scrollHeight;
+        }
+
+        document.getElementById('clearLogBtn').addEventListener('click', () => {
+            consoleLogs.innerHTML = '<div class="text-slate-500">// Bảng điều khiển đã được làm sạch. Sẵn sàng nhận lệnh mới.</div>';
+        });
+
+        runBtn.addEventListener('click', async () => {
+            const currentScenario = scenarioSelect.value;
+            
+            // Reset trạng thái giao diện của Đồ thị về mặc định
+            runBtn.disabled = true;
+            document.querySelectorAll('.node-active, .node-done').forEach(el => el.className = el.className.replace(/node-active|node-done/g, '').trim());
+            document.querySelectorAll('#node-tax, #node-compliance, #node-privacy').forEach(el => el.style.opacity = "0.4");
+            document.querySelectorAll('[id^="status-"]').forEach(el => el.className = "h-2 w-2 rounded-full bg-slate-400");
+            
+            consoleLogs.innerHTML = "";
+            appendLog(`> Khởi tạo tác vụ: "Gửi câu hỏi pháp lý phân tán qua A2A client..."`, "text-blue-400 font-bold");
+            appendLog(`Question Input: "${questionInput.value}"\n----------------------------------------------------------------------`, "text-slate-400");
+            
+            await new Promise(r => setTimeout(r, 600));
+
+            // --- BƯỚC 1: ANALYZE LAW ---
+            document.getElementById('node-analyze').classList.add('node-active');
+            document.getElementById('status-10101').className = "h-2 w-2 rounded-full bg-amber-500"; // Law agent nhấp nháy đèn mạng
+            appendLog(simulationData.analyze);
+            await new Promise(r => setTimeout(r, 1500));
+            document.getElementById('node-analyze').classList.replace('node-active', 'node-done');
+
+            // --- BƯỚC 2: ROUTER ---
+            document.getElementById('node-route').classList.add('node-active');
+            appendLog(simulationData.route(currentScenario));
+            await new Promise(r => setTimeout(r, 1200));
+            document.getElementById('node-route').classList.replace('node-active', 'node-done');
+
+            // --- BƯỚC 3: PARALLEL EXECUTION (CHẠY SONG SONG) ---
+            appendLog("\n[A2A Protocol Engine] Kích hoạt luồng phân phối công việc song song (Parallel Send API)...", "text-amber-400");
+            
+            let parallelPromises = [];
+
+            // Điều kiện kích hoạt các Agent phụ theo kịch bản từ khóa
+            if(currentScenario === 'all' || currentScenario === 'tax_only') {
+                parallelPromises.push((async () => {
+                    const el = document.getElementById('node-tax');
+                    el.style.opacity = "1";
+                    el.classList.add('node-active');
+                    document.getElementById('status-10102').className = "h-2 w-2 rounded-full bg-emerald-500";
+                    await new Promise(r => setTimeout(r, 1800));
+                    appendLog(simulationData.tax);
+                    el.classList.replace('node-active', 'node-done');
+                })());
+            }
+
+            if(currentScenario === 'all' || currentScenario === 'no_privacy') {
+                parallelPromises.push((async () => {
+                    const el = document.getElementById('node-compliance');
+                    el.style.opacity = "1";
+                    el.classList.add('node-active');
+                    document.getElementById('status-10103').className = "h-2 w-2 rounded-full bg-emerald-500";
+                    await new Promise(r => setTimeout(r, 1400));
+                    appendLog(simulationData.compliance);
+                    el.classList.replace('node-active', 'node-done');
+                })());
+            }
+
+            if(currentScenario === 'all') {
+                parallelPromises.push((async () => {
+                    const el = document.getElementById('node-privacy');
+                    el.style.opacity = "1";
+                    el.classList.add('node-active');
+                    await new Promise(r => setTimeout(r, 2200));
+                    appendLog(simulationData.privacy);
+                    el.classList.replace('node-active', 'node-done');
+                })());
+            }
+
+            // Đợi tất cả các Agent chạy song song trả về kết quả thành công (Map-Reduce)
+            await Promise.all(parallelPromises);
+            await new Promise(r => setTimeout(r, 800));
+
+            // --- BƯỚC 4: AGGREGATE RESULTS ---
+            document.getElementById('node-aggregate').classList.add('node-active');
+            appendLog(simulationData.aggregate(currentScenario), "text-emerald-300 font-medium");
+            await new Promise(r => setTimeout(r, 1000));
+            document.getElementById('node-aggregate').classList.replace('node-active', 'node-done');
+
+            appendLog("\n[SUCCESS] Toàn bộ chu trình Multi-Agent xử lý hoàn tất hoàn hảo!", "text-emerald-400 font-bold");
+            runBtn.disabled = false;
+        });
+    </script>
+</body>
+</html>

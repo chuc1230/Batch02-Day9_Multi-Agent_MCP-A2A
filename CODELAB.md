@@ -65,9 +65,27 @@ uv run python stages/stage_1_direct_llm/main.py
 Mở file `stages/stage_1_direct_llm/main.py` và trả lời:
 
 1. LLM được khởi tạo như thế nào? (Tìm hàm `get_llm()`)
-2. Message được gửi đến LLM có cấu trúc gì?
-3. Tại sao cần có `SystemMessage` và `HumanMessage`?
+Trong file, câu lệnh llm = get_llm() sẽ gọi đến hàm get_llm(). Hàm này khởi tạo một đối tượng ChatOpenAI (một class của thư viện LangChain) nhưng được cấu hình để "hướng đầu ra" về phía nền tảng OpenRouter (một dịch vụ proxy cho phép gọi nhiều mô hình AI khác nhau).
 
+Cụ thể, các tham số cấu hình khi khởi tạo bao gồm:
+
+model: Lấy từ biến môi trường OPENROUTER_MODEL. Nếu không được thiết lập trong file .env, nó sẽ mặc định sử dụng mô hình anthropic/claude-sonnet-4-5.
+
+openai_api_key: Sử dụng API Key của OpenRouter thông qua biến môi trường OPENROUTER_API_KEY.
+
+openai_api_base: Được chỉ định cứng (hardcode) là "https://openrouter.ai/api/v1". Việc thay đổi base URL này giúp class ChatOpenAI gửi request đến máy chủ OpenRouter thay vì máy chủ mặc định của OpenAI.
+2. Message được gửi đến LLM có cấu trúc gì?
+Cấu trúc tin nhắn (messages) được gửi đến LLM là một Mảng/Danh sách (List) tuần tự gồm các đối tượng tin nhắn có phân vai (Role-based messages).
+
+Trong đoạn code, danh sách này chứa 2 phần tử theo đúng thứ tự:
+
+Phần tử đầu tiên: Một đối tượng SystemMessage chứa câu lệnh định hướng vai trò.
+
+Phần tử thứ hai: Một đối tượng HumanMessage chứa câu hỏi thực tế của người dùng (QUESTION).
+3. Tại sao cần có `SystemMessage` và `HumanMessage`?
+Việc chia tách thành hai loại Message này nhằm mục đích phân định rõ ràng quyền hạn và bản chất của thông tin truyền vào mô hình:
+- SystemMessage (Tin nhắn hệ thống): * Vai trò: Dùng để thiết lập "bối cảnh nền", quy định phong cách, tính cách, giới hạn hành vi và định dạng câu trả lời cho AI trước khi cuộc hội thoại bắt đầu.
+- HumanMessage (Tin nhắn của người dùng): * Vai trò: Đại diện cho nội dung, câu hỏi hoặc yêu cầu trực tiếp từ phía người dùng (ở đây là biến QUESTION về hậu quả pháp lý khi vi phạm NDA).
 **Bài Tập 1.1:** Thay đổi câu hỏi
 
 Sửa biến `QUESTION` thành câu hỏi pháp lý khác (tiếng Việt hoặc tiếng Anh) và chạy lại.
@@ -105,9 +123,27 @@ uv run python stages/stage_2_rag_tools/main.py
 Mở `stages/stage_2_rag_tools/main.py` và tìm:
 
 1. Hàm `@tool` decorator được dùng ở đâu?
-2. `LEGAL_KNOWLEDGE` được cấu trúc như thế nào?
-3. LLM được bind với tools ra sao? (Tìm `.bind_tools()`)
+Decorator @tool (được import từ langchain_core.tools) được sử dụng ngay phía trên định nghĩa của các hàm để biến các hàm Python thông thường thành các công cụ (Tools) mà LangChain và LLM có thể hiểu và gọi được: search_legal_database(query: str), 
+calculate_damages(breach_type: str, contract_value: float).
 
+2. `LEGAL_KNOWLEDGE` được cấu trúc như thế nào?
+LEGAL_KNOWLEDGE đóng vai trò như một cơ sở dữ liệu tri thức pháp luật giả lập (simulated knowledge base). Nó được cấu trúc dưới dạng Một danh sách (List) chứa các từ điển (Dictionaries).
+
+Mỗi một phần tử (mỗi từ điển) trong danh sách đại diện cho một mẩu thông tin pháp lý và có cấu trúc gồm 3 cặp key-value cố định:
+
+- id (Kiểu dữ liệu: String): Mã định danh duy nhất cho mẩu thông tin đó (Ví dụ: "ucc_breach", "nda_trade_secret").
+
+- keywords (Kiểu dữ liệu: List của các Strings): Danh sách các từ khóa liên quan. Hàm search_legal_database sẽ quét qua danh sách từ khóa này để so khớp với câu hỏi của người dùng và tính điểm tương đồng.
+
+- text (Kiểu dữ liệu: String): Nội dung chi tiết của điều luật hoặc án lệ (ví dụ: nội dung về bộ luật thương mại Mỹ UCC, luật bảo vệ bí mật kinh doanh DTSA, v.v.).
+3. LLM được bind với tools ra sao? (Tìm `.bind_tools()`)
+Quá trình liên kết (bind) các công cụ vào LLM được thực hiện bên trong hàm main() thông qua phương thức .bind_tools() của đối tượng llm.
+
+Quy trình diễn ra qua các bước cụ thể trong code như sau:
+
+- Gom nhóm các công cụ: Đầu tiên, hai hàm đã được gắn decorator @tool được gom lại vào một danh sách đặt tên là TOOLS
+- Khởi tạo LLM gốc: Khởi tạo đối tượng mô hình ngôn ngữ
+- Thực hiện Bind (Liên kết): Gọi phương thức .bind_tools(TOOLS) và gán vào một biến mới là llm_with_tools
 **Bài Tập 2.1:** Thêm knowledge base entry
 
 Thêm một entry mới vào `LEGAL_KNOWLEDGE` về luật lao động:
@@ -383,10 +419,31 @@ Sửa `tax_agent/graph.py`, thay đổi system prompt để agent trả lời ng
 ### Câu Hỏi Ôn Tập
 
 1. Khi nào nên dùng single agent thay vì multi-agent?
-2. Ưu điểm của A2A protocol so với gRPC hoặc REST thông thường?
-3. Làm thế nào để prevent infinite delegation loops trong A2A?
-4. Tại sao cần Registry service? Có thể hardcode URLs không?
+- Tác vụ đơn giản, tuyến tính: Quy trình xử lý cố định, ít rẽ nhánh tư duy phức tạp.
 
+- Phạm vi kiến thức hẹp: Chỉ cần tương tác với một vài công cụ thuộc cùng một chuyên môn.
+
+- Tối ưu tài nguyên: Cần tiết kiệm token, giảm chi phí API và hạ thấp độ trễ (latency) hệ thống.
+
+- Dễ phát triển/debug: Quản lý một State tập trung, không phân tán.
+2. Ưu điểm của A2A protocol so với gRPC hoặc REST thông thường?
+- Chuẩn hóa cấu trúc tin nhắn AI: Định nghĩa sẵn định dạng chuyên biệt cho LLM gồm phân vai (Role), các phần nội dung (Parts) và kết quả công cụ (Artifacts).
+
+- Quản lý vòng đời tác vụ phân tán: Hỗ trợ cơ chế tự động ủy quyền (delegation) và đính kèm lịch sử hội thoại giữa các agent phân tán.
+
+- Khả năng quan sát (Observability): Tích hợp sẵn cơ chế theo dõi luồng request (như trace_id) xuyên qua nhiều dịch vụ.
+3. Làm thế nào để prevent infinite delegation loops trong A2A?
+- Giới hạn độ sâu ủy quyền (Max Depth): Gắn một biến đếm số lượt chuyển giao (depth) vào metadata; nếu vượt ngưỡng (ví dụ: > 5) lập tức ngắt luồng.
+
+- Lưu vết lịch sử định tuyến (Routing History): Đính kèm danh sách các agent đã xử lý request; chặn không cho chuyển giao đến agent đã có tên trong danh sách.
+
+- Thiết kế đồ thị một chiều (DAG): Ép luồng đi theo cấu trúc phân cấp nghiêm ngặt (ví dụ: Chuyên gia không được gọi ngược lại Điều phối viên).
+4. Tại sao cần Registry service? Có thể hardcode URLs không?
+- Tại sao cần Registry: Đóng vai trò như một danh bạ trung tâm để các Agent tự động đăng ký địa chỉ khi khởi động và giúp các Agent khác tự động tìm thấy nhau mà không cần cấu hình thủ công.
+
+- Có thể hardcode không: * Có: Khi làm bài tập nhỏ ở local (ví dụ: gán cứng http://localhost:10102).
+
+  - Không nên (khi lên Production): Vì làm mất khả năng tự động mở rộng (Scaling), không thể tự động phát hiện lỗi khi một máy chủ bị sập (Fault-tolerance), và cực kỳ khó bảo trì khi hệ thống tăng lên hàng chục Agent.
 ### Bài Tập Nâng Cao (Tự Học)
 
 **Challenge 1:** Thêm memory/conversation history
@@ -424,4 +481,9 @@ Nếu gặp vấn đề:
 
 ---
 
+## Bài Tập Cộng Điểm:
+1. Vite Code HTML File Để demo các tương tác của các Agent ở stage 4 hoặc stage 5
+2. Sau khi chạy full Stage 5 (test_client.py) trả lời 2 câu hỏi:
+- Latency (Tổng thời gian trả lời 1 câu hỏi của hệ thống) là bao nhiêu giây?
+- Đề xuất phương án giảm latency và demo + show thời gian xử lý đã giảm được khi apply phương án?
 **Chúc các bạn học tốt! 🚀**
